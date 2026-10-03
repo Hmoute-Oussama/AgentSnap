@@ -76,8 +76,15 @@ export interface AgentAdapter {
   readonly docsUrl: string;
   readonly execution: 'subprocess' | 'in-process';
 
-  capabilities(): AgentCapabilities;
+capabilities(): AgentCapabilities;
   detect(context: DetectContext): Promise<DetectionResult>;
+  /**
+   * Minimum runtime version this adapter can safely drive, or `null` when unconstrained.
+   *
+   * Used by `agentsnap run` and `agentsnap doctor` to warn before a version mismatch turns
+   * into an opaque "unknown option" failure from the runtime itself.
+   */
+  minimumVersion?(detected: string | null): string | null;
   /** Extra `doctor` checks beyond availability. */
   diagnostics?(context: DetectContext): Promise<DiagnosticEntry[]>;
 /** Builds the full argv for a subprocess runtime, including the prompt. */

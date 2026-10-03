@@ -55,6 +55,11 @@ export const claudeCodeAdapter: AgentAdapter = {
   },
   detect,
   displayName: 'Claude Code',
+  /**
+   * The permission-prompt flag is the newest requirement, so it is the floor for the adapter
+   * as a whole: below it, unattended runs cannot be made non-interactive.
+   */
+  minimumVersion: () => CLAUDE_MINIMUMS.permissionPrompts,
   docsUrl: DOCS_URL,
   execution: 'subprocess',
   name: 'claude-code',
