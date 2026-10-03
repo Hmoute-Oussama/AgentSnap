@@ -1,0 +1,87 @@
+{
+  "name": "agentsnap",
+  "version": "0.1.0",
+  "description": "Unit tests for AI agents. Test, snapshot, and detect behavioral regressions in AI coding agents.",
+  "keywords": [
+    "ai",
+    "agent",
+    "agents",
+    "testing",
+    "regression",
+    "snapshot",
+    "claude-code",
+    "llm",
+    "evals",
+    "ci"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "bin": {
+    "agentsnap": "dist/cli/bin.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "build:test": "tsc -p tsconfig.test.json",
+    "clean": "node scripts/clean.mjs",
+    "dev": "npm run build && node dist/cli/bin.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "pretest": "npm run build && npm run build:test",
+    "test": "node --test build/test/",
+    "test:unit": "npm run build:test && node --test build/test/unit/",
+    "test:integration": "npm run build:test && node --test build/test/integration/",
+    "test:e2e": "npm run build:test && node --test build/test/e2e/",
+    "test:coverage": "node --test --experimental-test-coverage build/test/",
+    "verify": "npm run lint && npm run typecheck && npm run build && npm run build:test && node --test build/test/",
+    "prepack": "npm run clean && npm run build",
+    "check:package": "node scripts/check-package.mjs",
+    "check:install": "node scripts/check-install.mjs"
+  },
+  "dependencies": {
+    "minimatch": "^10.0.3",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.37.0",
+    "@types/node": "^20.19.0",
+    "eslint": "^9.37.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hmoute-Oussama/AgentSnap.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Hmoute-Oussama/AgentSnap/issues"
+  },
+  "homepage": "https://github.com/Hmoute-Oussama/AgentSnap#readme",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/Hmoute-Oussama"
+  }
+}

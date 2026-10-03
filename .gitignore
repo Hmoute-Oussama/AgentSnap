@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+
+# AgentSnap runtime artifacts
+.agentsnap/tmp/
+.agentsnap/runs/
+.agentsnap/last-run.json
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json

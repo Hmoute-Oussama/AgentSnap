@@ -1,0 +1,11 @@
+# Normalize line endings in the repository; check out native endings on Windows.
+* text=auto eol=lf
+
+# Windows-specific scripts must always use CRLF.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Keep generated artifacts out of language statistics and diffs.
+dist/** linguist-generated=true
+build/** linguist-generated=true
+package-lock.json linguist-generated=true
