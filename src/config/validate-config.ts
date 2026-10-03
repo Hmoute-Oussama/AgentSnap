@@ -150,6 +150,10 @@ function readAgent(raw: unknown, issues: Issue[]): AgentConfig {
   assignString(raw, 'permissionMode', 'agent.permissionMode', issues, agent);
   assignString(raw, 'appendSystemPrompt', 'agent.appendSystemPrompt', issues, agent);
   assignString(raw, 'cwd', 'agent.cwd', issues, agent);
+  if (raw['bare'] !== undefined) {
+    issues.push(...requireBoolean(raw['bare'], 'agent.bare'));
+    if (typeof raw['bare'] === 'boolean') agent.bare = raw['bare'];
+  }
 
   if (raw['args'] !== undefined) {
     issues.push(...requireStringArray(raw['args'], 'agent.args'));

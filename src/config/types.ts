@@ -27,6 +27,11 @@ export interface AgentConfig {
   inheritEnv?: string[];
   /** Working directory inside the sandbox. Defaults to the sandbox root. */
   cwd?: string;
+  /**
+   * Run in "bare" mode, skipping host-level hooks, plugins, MCP servers and memory files.
+   * Off by default: agent tests usually exist to observe the effect of those files.
+   */
+  bare?: boolean;
 }
 
 export interface DockerSandboxConfig {

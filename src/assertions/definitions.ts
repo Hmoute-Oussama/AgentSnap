@@ -43,7 +43,8 @@ export interface AssertionContext {
   permissionRequests: Array<{ tool: string; decision: 'granted' | 'denied' | 'skipped' }>;
   /** Path patterns that the sandbox or config declared forbidden. */
   forbidden: { read: MatcherSpec[]; write: MatcherSpec[]; execute: MatcherSpec[] };
-  networkAttempts: number[];
+  /** URLs the agent attempted to reach, as reported by the runtime or sandbox. */
+  networkAttempts: string[];
   /** Final assistant output, already redacted. */
   output: string;
   /** Runs a command in the post-agent workspace; used by `*_must_pass` assertions. */
@@ -158,7 +159,7 @@ function validateMatcherList(spec: unknown, key: string): Issue[] {
 }
 
 define<CountSpec>({
-  describe: (spec) => `${countLabel(normalizeCountSpec(spec))} must be ${['created', 'modified', 'created or modified', 'deleted'].find((_, i) => i === 0)}`,
+  describe: (spec) => `${countLabel(normalizeCountSpec(spec))} must be created or modified`,
   group: 'files',
   kind: 'file_changed',
   summary: 'Files matching a pattern are created or modified by the agent.',

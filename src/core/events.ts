@@ -148,17 +148,29 @@ export type AgentEvent =
   | MessageEvent
   | ErrorEvent;
 
-/** Anything that can emit events. Adapters and sandboxes implement this. */
-export type EventEmitter = (event: Omit<AgentEvent, 'seq' | 'at'> & Partial<Pick<AgentEvent, 'seq' | 'at'>>) => void;
+/**
+ * Anything that can emit events. Adapters and sandboxes implement this.
+ *
+ * The distributive conditional matters: a plain `Omit<AgentEvent, 'at' | 'seq'>` collapses to
+ * the keys common to every member and would silently drop per-event fields such as `tool` or
+ * `path`, so every `recorder.emit({ ... })` would stop type-checking.
+ */
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
+export type EventInput = DistributiveOmit<AgentEvent, 'at' | 'seq'> &
+  Partial<Pick<AgentEvent, 'at' | 'seq'>>;
+
+export type EventEmitter = (event: EventInput) => void;
 
 /** Assigns sequence numbers and timestamps so adapters never have to. */
 export class EventRecorder {
   #seq = 0;
   readonly events: AgentEvent[] = [];
 
-  emit(input: Omit<AgentEvent, 'seq' | 'at'> & Partial<Pick<AgentEvent, 'seq' | 'at'>>): AgentEvent {
-    const event = { ...input, at: input.at ?? nowIso(), seq: input.seq ?? this.#seq++ } as AgentEvent;
+  emit(input: EventInput): AgentEvent {
+    const seq = input.seq ?? this.#seq;
     if (input.seq === undefined) this.#seq += 1;
+    const event = { ...input, at: input.at ?? nowIso(), seq } as AgentEvent;
     this.events.push(event);
     return event;
   }
