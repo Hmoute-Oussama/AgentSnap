@@ -76,13 +76,21 @@ export interface DefaultsConfig {
 }
 
 export interface SnapshotPolicy {
-  /** `auto` writes a missing snapshot, `never` fails when one is missing. */
+  /** `auto` writes a missing snapshot, `never` refuses to create one. */
   update: 'auto' | 'never';
+  /**
+   * How a run is compared against the stored baseline:
+   *   - `strict`: any difference in any category fails the test
+   *   - `loose` (default): only *new* side effects fail, because agents vary run to run
+   *   - `off`: snapshots are recorded but never compared
+   */
+  compare: 'strict' | 'loose' | 'off';
 }
 
 export interface SnapshotConfig {
   dir: string;
   update: SnapshotPolicy['update'];
+  compare: SnapshotPolicy['compare'];
 }
 
 /**
@@ -172,6 +180,7 @@ export const DEFAULT_SANDBOX: SandboxConfig = {
 };
 
 export const DEFAULT_SNAPSHOT: SnapshotConfig = {
+  compare: 'loose',
   dir: '.agentsnap/snapshots',
   update: 'auto',
 };

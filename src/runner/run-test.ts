@@ -14,6 +14,10 @@ import type {
   SandboxInfo,
 } from '../core/types.js';
 import { createSandbox } from '../sandbox/index.js';
+import { diffSnapshot } from '../snapshots/diff.js';
+import { normalizeRun, type SnapshotPayload } from '../snapshots/normalize.js';
+import { readSnapshot, writeSnapshot } from '../snapshots/store.js';
+import { join } from 'node:path';
 import type { Sandbox } from '../sandbox/types.js';
 import { computeDelta, type FileDelta } from '../utils/fsx.js';
 import { createRunId } from '../utils/hash.js';
@@ -30,7 +34,11 @@ export interface RunTestOptions {
   attempt: number;
   config: AgentSnapConfig;
   defaultTestCommand: string | null;
+  /** Overrides `snapshot.update`, e.g. for `--update-snapshots`. */
+  forceSnapshotUpdate?: 'auto' | 'never';
   logger: Logger;
+  /** Overrides `snapshot.compare`, e.g. for `--snapshot-mode strict`. */
+  snapshotCompare?: 'strict' | 'loose' | 'off';
   recordEvents: boolean;
   signal: AbortSignal;
   test: TestCase;
@@ -101,14 +109,12 @@ export async function runTest(options: RunTestOptions): Promise<RunRecord> {
       { defaultTestCommand: options.defaultTestCommand },
     );
 
-    const status = decideStatus(outcome.exitReason, outcome.timedOut, assertions);
-
-    return buildRecord({
+    const record = buildRecord({
       adapter,
       assertions,
       attempt,
       delta: toFileChanges(delta),
-      exitReason: status.exitReason,
+      exitReason: outcome.exitReason,
       output: outcome.output,
       projected,
       redactor,
@@ -118,10 +124,35 @@ export async function runTest(options: RunTestOptions): Promise<RunRecord> {
       sandbox,
       start,
       startedAt,
-      status: status.status,
+      status: 'passed',
       test,
       usage: outcome.usage,
     });
+
+    // Snapshots are evaluated after the record exists because they compare against the same
+    // normalized payload that gets persisted, keeping the two definitions identical.
+    const snapshot = await evaluateSnapshot({
+      adapter: adapter.name,
+      config,
+      forceUpdate: options.forceSnapshotUpdate,
+      logger,
+      mode: options.snapshotCompare ?? test.snapshot.compare,
+      record,
+      root: sandbox.root,
+      test,
+    });
+
+    record.assertions.push(snapshot.assertion);
+    if (snapshot.assertion.status === 'failed') {
+      record.exitReason = 'assertions-failed';
+      record.status = 'failed';
+    } else {
+      const status = decideStatus(outcome.exitReason, outcome.timedOut, assertions);
+      record.exitReason = status.exitReason;
+      record.status = status.status;
+    }
+
+    return record;
   } catch (error) {
     return errorRecord({
       adapter,
@@ -661,6 +692,129 @@ function skippedRecord(input: {
     test: input.test.name,
     usage: null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Snapshots
+// ---------------------------------------------------------------------------
+
+interface SnapshotEvaluation {
+  assertion: AssertionResult;
+}
+
+/**
+ * Compares the run against its stored behavioral baseline.
+ *
+ * A missing baseline is created under `update: auto` and reported as a passing (informational)
+ * assertion, because the first run of a new test cannot be a regression. Under `never` the
+ * same situation fails, which is what CI should use when it wants baselines to be reviewed.
+ */
+async function evaluateSnapshot(input: {
+  adapter: string;
+  config: AgentSnapConfig;
+  forceUpdate: 'auto' | 'never' | undefined;
+  logger: Logger;
+  mode: 'strict' | 'loose' | 'off';
+  record: RunRecord;
+  root: string;
+  test: TestCase;
+}): Promise<SnapshotEvaluation> {
+  const update = input.forceUpdate ?? input.test.snapshot.update;
+  const dir = join(input.config.rootDir, input.config.snapshot.dir);
+  const store = {
+    adapter: input.adapter,
+    dir,
+    model: input.record.model,
+    test: input.test.name,
+    variant: input.test.snapshot.variant,
+  };
+
+  const payload = normalizeRun(input.record, input.root);
+  const stored = await readSnapshot(store);
+  const diff = diffSnapshot(payload, stored, { mode: input.mode, update });
+
+  if (stored === null) {
+    if (update === 'auto') {
+      const written = await writeSnapshot(store, payload, update);
+      if (written) {
+        input.logger.info('recorded a new behavioral baseline', {
+          test: input.test.name,
+          variant: input.test.snapshot.variant,
+        });
+      }
+    } else {
+      input.logger.info('no baseline was written because snapshot.update is `never`', {
+        test: input.test.name,
+      });
+    }
+  }
+
+  const index = input.record.assertions.length;
+  const base = {
+    expectation: 'the agent behaves like the recorded baseline',
+    index,
+    kind: 'snapshot_matches',
+  };
+
+  if (diff.status === 'disabled') {
+    return {
+      assertion: { ...base, observed: 'snapshot comparison is disabled', status: 'skipped' },
+    };
+  }
+  if (diff.status === 'created') {
+    return {
+      assertion: {
+        ...base,
+        details: { payload },
+        observed: `recorded a new baseline (${summarizePayload(payload)})`,
+        status: 'passed',
+      },
+    };
+  }
+  if (diff.status === 'missing') {
+    return {
+      assertion: {
+        ...base,
+        observed: 'no snapshot exists and snapshot.update is `never`',
+        skipReason: undefined,
+        status: 'failed',
+      },
+    };
+  }
+  if (diff.status === 'matched') {
+    return {
+      assertion: { ...base, observed: summarizePayload(payload), status: 'passed' },
+    };
+  }
+
+  const observed = [`behavior differs from the recorded baseline:`, ...diff.changes.map((c) => `  ${c}`)].join('\n');
+  if (!diff.isRegression) {
+    return {
+      assertion: {
+        ...base,
+        details: { changes: diff.changes },
+        observed: `${observed}\n(no new side effects, so this is not a regression in \`${input.mode}\` mode)`,
+        status: 'warning',
+      },
+    };
+  }
+  return {
+    assertion: {
+      ...base,
+      details: { changes: diff.changes, mode: input.mode },
+      observed,
+      status: 'failed',
+    },
+  };
+}
+
+function summarizePayload(payload: SnapshotPayload): string {
+  const parts: string[] = [];
+  if (payload.files.length > 0) parts.push(`${payload.files.length} file(s)`);
+  if (payload.commands.length > 0) parts.push(`${payload.commands.length} command(s)`);
+  if (payload.tools.length > 0) parts.push(`tools: ${payload.tools.join(', ')}`);
+  if (parts.length === 0) return 'the agent changed nothing';
+  return parts.join(', ');
 }
 
 function isAbort(error: unknown): boolean {

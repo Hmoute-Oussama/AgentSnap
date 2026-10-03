@@ -2,7 +2,7 @@ import { getAdapter, probeAdapters, versionAtLeast } from '../../adapters/regist
 import { loadConfig } from '../../config/index.js';
 import { inspectRepository } from '../../config/discovery.js';
 import { ExitCode } from '../../core/exit-codes.js';
-import { ConfigError } from '../../core/errors.js';
+import { ConfigError, UsageError } from '../../core/errors.js';
 import type { DiagnosticEntry, SuiteResult } from '../../core/types.js';
 import { runSuite } from '../../runner/run-suite.js';
 import { createTestFilter } from '../../runner/filter.js';
@@ -29,8 +29,10 @@ const RUN_FLAGS = [
   'quiet',
   'reporter',
   'retries',
+  'snapshot-mode',
   'tag',
   'timeout',
+  'update-snapshots',
   'usage',
   'verbose',
   'version',
@@ -107,6 +109,11 @@ export async function commandRun(context: CliContext): Promise<number> {
   const concurrency = Math.max(1, flags.number('concurrency', 1) ?? 1);
   const timeoutOverride = flags.number('timeout');
   const retriesOverride = flags.number('retries');
+
+  if (flags.bool('update-snapshots')) {
+    context.logger.info('--update-snapshots: behavioral baselines will be rewritten');
+  }
+  const snapshotCompare = parseCompareMode(flags.string('snapshot-mode'));
   const effective = timeoutOverride === undefined && retriesOverride === undefined
     ? config
     : {
@@ -146,10 +153,19 @@ export async function commandRun(context: CliContext): Promise<number> {
     recordEvents: flags.bool('include-events'),
     reporter,
     signal: context.signal,
+    snapshotCompare,
     toolVersion: context.toolVersion,
   });
 
   return exitCodeFor(result);
+}
+
+function parseCompareMode(value: string | undefined): 'strict' | 'loose' | 'off' | undefined {
+  if (value === undefined) return undefined;
+  if (value === 'strict' || value === 'loose' || value === 'off') return value;
+  throw new UsageError(`--snapshot-mode must be strict, loose or off, received ${JSON.stringify(value)}.`, {
+    fixes: ['Use `--snapshot-mode strict` to fail on any behavioral difference.'],
+  });
 }
 
 /**

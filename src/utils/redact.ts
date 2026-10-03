@@ -30,6 +30,15 @@ const ASSIGNMENT_PATTERNS = [
 
 const SECRET_NAME = /(?:^|_)(?:API_?KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIALS?|PRIVATE_KEY|ACCESS_KEY|SESSION|COOKIE|AUTH)(?:$|_)/i;
 
+/**
+ * Variables whose values are locations, not secrets.
+ *
+ * Without this list the entropy heuristic below masks `%TEMP%`, `%USERPROFILE%` and similar
+ * values, which then corrupt every path AgentSnap prints (`***redacted***\project\...`).
+ */
+const LOCATION_NAME =
+  /^(?:APPDATA|CDPATH|COMPUTERNAME|COMSPEC|HOME|HOMEDRIVE|HOMEPATH|LANG|LOCALAPPDATA|LOGONSERVER|NUMBER_OF_PROCESSORS|OLDPWD|OS|PATH|PROGRAMDATA|PROGRAMFILES(?:\(X86\))?|PSModulePath|PUBLIC|PWD|SHELL|SHLVL|SystemDrive|SystemRoot|TEMP|TERMINFO|TMP|TMPDIR|USERNAME|USERDOMAIN|USERPROFILE|WINDIR)$/i;
+
 /** A value long enough to be worth masking when it looks random (binary-ish). */
 function looksLikeSecretValue(value: string): boolean {
   if (value.length < 8) return false;
@@ -54,7 +63,12 @@ export function createRedactor(env: NodeJS.ProcessEnv = process.env, extraSecret
   const literals = new Set<string>();
   for (const [name, value] of Object.entries(env)) {
     if (typeof value !== 'string' || value.length < 8) continue;
-    if (SECRET_NAME.test(name) || looksLikeSecretValue(value)) literals.add(value);
+    if (SECRET_NAME.test(name)) {
+      literals.add(value);
+      continue;
+    }
+    if (LOCATION_NAME.test(name)) continue;
+    if (looksLikeSecretValue(value)) literals.add(value);
   }
   for (const secret of extraSecrets) {
     if (typeof secret === 'string' && secret.length >= 6) literals.add(secret);

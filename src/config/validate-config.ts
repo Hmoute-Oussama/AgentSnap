@@ -329,7 +329,7 @@ function readSnapshot(raw: unknown, issues: Issue[]): SnapshotConfig {
     issues.push({ path: 'snapshot', message: 'expected a mapping.' });
     return snapshot;
   }
-  issues.push(...rejectUnknownKeys(raw, ['dir', 'update'], 'snapshot'));
+  issues.push(...rejectUnknownKeys(raw, ['compare', 'dir', 'update'], 'snapshot'));
   if (typeof raw['dir'] === 'string' && raw['dir'].trim() !== '') {
     const dir = raw['dir'].trim();
     if (isAbsolute(dir)) {
@@ -340,9 +340,15 @@ function readSnapshot(raw: unknown, issues: Issue[]): SnapshotConfig {
   } else if (raw['dir'] !== undefined) {
     issues.push({ path: 'snapshot.dir', message: 'must be a non-empty relative path.' });
   }
-  if (raw['update'] !== undefined) {
+if (raw['update'] !== undefined) {
     issues.push(...requireEnum(raw['update'], ['auto', 'never'] as const, 'snapshot.update'));
     if (raw['update'] === 'auto' || raw['update'] === 'never') snapshot.update = raw['update'];
+  }
+  if (raw['compare'] !== undefined) {
+    issues.push(...requireEnum(raw['compare'], ['strict', 'loose', 'off'] as const, 'snapshot.compare'));
+    if (raw['compare'] === 'strict' || raw['compare'] === 'loose' || raw['compare'] === 'off') {
+      snapshot.compare = raw['compare'];
+    }
   }
   return snapshot;
 }
@@ -467,7 +473,7 @@ function readTests(
       retries: context.defaults.retries,
       skip: false,
       skipReason: '',
-      snapshot: { update: context.snapshot.update, variant: 'default' },
+      snapshot: { compare: context.snapshot.compare, update: context.snapshot.update, variant: 'default' },
       tags: [],
       timeout: { ...context.defaults.timeout },
     };
@@ -515,10 +521,10 @@ function readTests(
       }
     }
     if (entry['snapshot'] !== undefined) {
-      if (!isPlainObject(entry['snapshot'])) {
-        issues.push({ path: `${path}.snapshot`, message: 'expected a mapping with `variant` and `update`.' });
+if (!isPlainObject(entry['snapshot'])) {
+        issues.push({ path: `${path}.snapshot`, message: 'expected a mapping with `variant`, `update` and `compare`.' });
       } else {
-        issues.push(...rejectUnknownKeys(entry['snapshot'], ['variant', 'update'], `${path}.snapshot`));
+        issues.push(...rejectUnknownKeys(entry['snapshot'], ['compare', 'variant', 'update'], `${path}.snapshot`));
         if (entry['snapshot']['variant'] !== undefined) {
           issues.push(...requireString(entry['snapshot']['variant'], `${path}.snapshot.variant`));
           if (typeof entry['snapshot']['variant'] === 'string') {
@@ -529,6 +535,19 @@ function readTests(
           issues.push(...requireEnum(entry['snapshot']['update'], ['auto', 'never'] as const, `${path}.snapshot.update`));
           if (entry['snapshot']['update'] === 'auto' || entry['snapshot']['update'] === 'never') {
             test.snapshot.update = entry['snapshot']['update'];
+          }
+        }
+        if (entry['snapshot']['compare'] !== undefined) {
+          issues.push(
+            ...requireEnum(
+              entry['snapshot']['compare'],
+              ['strict', 'loose', 'off'] as const,
+              `${path}.snapshot.compare`,
+            ),
+          );
+          const compare = entry['snapshot']['compare'];
+          if (compare === 'strict' || compare === 'loose' || compare === 'off') {
+            test.snapshot.compare = compare;
           }
         }
       }
