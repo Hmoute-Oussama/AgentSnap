@@ -110,10 +110,10 @@ export async function commandRun(context: CliContext): Promise<number> {
   const timeoutOverride = flags.number('timeout');
   const retriesOverride = flags.number('retries');
 
-  if (flags.bool('update-snapshots')) {
-    context.logger.info('--update-snapshots: behavioral baselines will be rewritten');
-  }
   const snapshotCompare = parseCompareMode(flags.string('snapshot-mode'));
+  // Blessing baselines is explicit: without the flag, `snapshot.update: never` stays `never`,
+  // so an existing baseline is never silently rewritten by an ordinary run.
+  const snapshotUpdate = flags.bool('update-snapshots') ? 'auto' : undefined;
   const effective = timeoutOverride === undefined && retriesOverride === undefined
     ? config
     : {
@@ -154,6 +154,7 @@ export async function commandRun(context: CliContext): Promise<number> {
     reporter,
     signal: context.signal,
     snapshotCompare,
+    snapshotUpdate,
     toolVersion: context.toolVersion,
   });
 

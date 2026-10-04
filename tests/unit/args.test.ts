@@ -29,6 +29,24 @@ describe('parseArgs', () => {
     assert.equal(flags.string('reporter'), 'json');
   });
 
+  it('reads every value-taking run flag without swallowing the next token', () => {
+    const parsed = parseArgs([
+      'run',
+      '--snapshot-mode',
+      'strict',
+      '--output',
+      'out.json',
+      '--timeout',
+      '30',
+    ]);
+    const flags = peekFlags(parsed);
+    assert.equal(flags.string('snapshot-mode'), 'strict');
+    assert.equal(flags.string('output'), 'out.json');
+    assert.equal(flags.number('timeout'), 30);
+    // A value flag must never be parsed as a boolean plus a stray positional.
+    assert.deepEqual(parsed.positionals, []);
+  });
+
   it('collects repeatable flags into a list', () => {
     const flags = peekFlags(parseArgs(['run', '--tag', 'a', '--tag', 'b']));
     assert.deepEqual(flags.list('tag'), ['a', 'b']);

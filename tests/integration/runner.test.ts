@@ -34,12 +34,17 @@ async function makeProject(
   return { config, dispose: project.dispose, project: project.path };
 }
 
-function run(options: { config: ReturnType<typeof makeConfig>; test: ReturnType<typeof makeTest> }) {
+function run(options: {
+  config: ReturnType<typeof makeConfig>;
+  test: ReturnType<typeof makeTest>;
+  forceSnapshotUpdate?: 'auto';
+}) {
   return runTest({
     adapter: fakeAdapter,
     attempt: 1,
     config: options.config,
     defaultTestCommand: null,
+    forceSnapshotUpdate: options.forceSnapshotUpdate,
     logger: silent,
     recordEvents: true,
     signal: new AbortController().signal,
@@ -232,6 +237,47 @@ describe('runTest snapshots', () => {
       assert.equal(snapshot.kind, 'snapshot_matches');
       assert.equal(snapshot.status, 'failed');
       assert.ok((snapshot.observed ?? '').length > 0);
+    } finally {
+      await dispose();
+    }
+  });
+
+  it('blesses a regression when the caller forces an update', async () => {
+    const { config, dispose } = await makeProject([
+      makeTest({
+        name: 'behaviour',
+        prompt,
+        snapshot: { compare: 'loose', update: 'never', variant: 'default' },
+      }),
+    ]);
+    try {
+      // Record the baseline through a forced update, then drift.
+      await run({ config, test: firstTest(config) });
+      const blessed = await run({
+        config,
+        test: makeTest({
+          name: 'behaviour',
+          prompt: `${prompt}\ndelete: out.txt`,
+          snapshot: { compare: 'loose', update: 'never', variant: 'default' },
+        }),
+        forceSnapshotUpdate: 'auto',
+      });
+      assert.equal(blessed.status, 'passed');
+      const snapshot = lastOf(blessed.assertions);
+      assert.equal(snapshot.kind, 'snapshot_matches');
+      assert.equal(snapshot.status, 'passed');
+      assert.match(snapshot.observed ?? '', /new baseline/);
+
+      // The blessed behaviour is what later runs are compared against.
+      const after = await run({
+        config,
+        test: makeTest({
+          name: 'behaviour',
+          prompt: `${prompt}\ndelete: out.txt`,
+          snapshot: { compare: 'loose', update: 'never', variant: 'default' },
+        }),
+      });
+      assert.equal(after.status, 'passed');
     } finally {
       await dispose();
     }

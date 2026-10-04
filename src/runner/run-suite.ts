@@ -32,6 +32,8 @@ export interface RunSuiteOptions {
   signal: AbortSignal;
   /** Overrides each test's `snapshot.compare` for this run. */
   snapshotCompare?: 'strict' | 'loose' | 'off';
+  /** Overrides each test's `snapshot.update`, set by `--update-snapshots`. */
+  snapshotUpdate?: 'auto';
   toolVersion: string;
 }
 
@@ -90,6 +92,7 @@ export async function runSuite(options: RunSuiteOptions): Promise<SuiteResult> {
           reporter,
           signal,
           snapshotCompare: options.snapshotCompare,
+          snapshotUpdate: options.snapshotUpdate,
           test,
           total: selected.length,
         });
@@ -144,6 +147,7 @@ interface RetryInput {
   reporter: Reporter;
   signal: AbortSignal;
   snapshotCompare?: 'strict' | 'loose' | 'off';
+  snapshotUpdate?: 'auto';
   test: TestCase;
   total: number;
 }
@@ -176,6 +180,7 @@ async function runWithRetries(input: RetryInput): Promise<RunRecord[]> {
       attempt,
       config: input.config,
       defaultTestCommand: input.defaultTestCommand,
+      forceSnapshotUpdate: input.snapshotUpdate,
       logger: input.logger,
       recordEvents: input.recordEvents,
       signal: input.signal,

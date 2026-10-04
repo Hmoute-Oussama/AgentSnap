@@ -122,6 +122,7 @@ const VALUE_FLAGS = new Set([
   'provider',
   'reporter',
   'retries',
+  'snapshot-mode',
   'tag',
   'timeout',
 ]);

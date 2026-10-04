@@ -752,13 +752,16 @@ async function evaluateSnapshot(input: {
     variant: input.test.snapshot.variant,
   };
 
-  const payload = normalizeRun(input.record, input.root);
+const payload = normalizeRun(input.record, input.root);
   const stored = await readSnapshot(store);
   const diff = diffSnapshot(payload, stored, { mode: input.mode, update });
+  // `--update-snapshots` means "accept what I just saw": a regression becomes the new baseline
+  // instead of a failure, while the changes are still reported so the blessing is never silent.
+  const blessing = input.forceUpdate === 'auto' && diff.isRegression;
 
-  if (stored === null) {
+  if (stored === null && !blessing) {
     if (update === 'auto') {
-      const written = await writeSnapshot(store, payload, update);
+      const written = await writeSnapshot(store, payload, 'auto');
       if (written) {
         input.logger.info('recorded a new behavioral baseline', {
           test: input.test.name,
@@ -770,14 +773,36 @@ async function evaluateSnapshot(input: {
         test: input.test.name,
       });
     }
+  } else if (blessing) {
+    const written = await writeSnapshot(store, payload, 'auto');
+    if (written) {
+      input.logger.info('accepted this run as the new behavioral baseline', {
+        test: input.test.name,
+        variant: input.test.snapshot.variant,
+      });
+    }
   }
 
-  const index = input.record.assertions.length;
+const index = input.record.assertions.length;
   const base = {
     expectation: 'the agent behaves like the recorded baseline',
     index,
     kind: 'snapshot_matches',
   };
+
+  if (blessing) {
+    return {
+      assertion: {
+        ...base,
+        details: { changes: diff.changes, payload },
+        observed: [
+          'accepted this run as the new baseline:',
+          ...(diff.changes.length === 0 ? ['  (no changes)'] : diff.changes.map((entry) => `  ${entry}`)),
+        ].join('\n'),
+        status: 'passed',
+      },
+    };
+  }
 
   if (diff.status === 'disabled') {
     return {
