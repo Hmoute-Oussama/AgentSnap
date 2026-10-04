@@ -74,6 +74,11 @@ export async function runTest(options: RunTestOptions): Promise<RunRecord> {
 
   const recorder = new EventRecorder();
 
+  // The wall-clock budget is enforced here instead of being left to the adapter, so an
+  // adapter that never returns cannot outlive the timeout it was configured with.
+  const timeoutSignal = AbortSignal.timeout(Math.max(1, test.timeout.total) * 1000);
+  const runSignal = AbortSignal.any([options.signal, timeoutSignal]);
+
   try {
     await sandbox.prepare();
     const before = await sandbox.scan();
@@ -85,14 +90,22 @@ export async function runTest(options: RunTestOptions): Promise<RunRecord> {
       maxCostUsd: test.maxCostUsd,
       prompt: test.prompt,
       sandbox,
-      signal: options.signal,
+      signal: runSignal,
       test,
       timeoutSeconds: test.timeout.total,
     };
 
     recorder.emit({ adapter: adapter.name, cwd: sandbox.root, type: 'agent_started' });
 
-    const outcome = await executeRuntime({ adapter, input, logger, recorder, sandbox, test });
+    const outcome = await executeRuntime({
+      adapter,
+      input,
+      logger,
+      recorder,
+      sandbox,
+      test,
+      timeoutSignal,
+    });
     const after = await sandbox.scan();
     const delta = computeDelta(before, after);
     reconcileWriteKinds(recorder, delta);
@@ -209,6 +222,8 @@ interface ExecuteRuntimeInput {
   recorder: EventRecorder;
   sandbox: Sandbox;
   test: TestCase;
+  /** Aborts when the test's wall-clock budget is spent. */
+  timeoutSignal: AbortSignal;
 }
 
 interface RuntimeOutcome {
@@ -229,11 +244,19 @@ async function executeRuntime(input: ExecuteRuntimeInput): Promise<RuntimeOutcom
     }
     const result = await adapter.run(input.input);
     const output = result.output ?? lastAssistantText(recorder);
+    // An in-process adapter has no child process to kill, so the deadline is the only thing
+    // that can end it; report it the same way the subprocess path does.
+    const timedOut = input.timeoutSignal.aborted;
+    const reported = result.errors ?? [];
     return {
-      errors: [...(result.errors ?? []), ...(result.ok === false ? ['the agent reported a failed run'] : [])],
-      exitReason: result.ok === false ? 'agent-error' : 'completed',
+      errors: [
+        ...reported,
+        ...(result.ok === false ? ['the agent reported a failed run'] : []),
+        ...(timedOut ? [`the agent exceeded its ${input.input.timeoutSeconds}s timeout`] : []),
+      ],
+      exitReason: timedOut ? 'timeout' : result.ok === false ? 'agent-error' : 'completed',
       output,
-      timedOut: false,
+      timedOut,
       usage: result.usage ?? null,
     };
   }

@@ -37,6 +37,20 @@ import type {
  */
 export const FAKE_DIRECTIVE = /^\s*(read|write|append|delete|exec|ask|network|fail|text|hang)\s*:\s*(.*)$/i;
 
+/**
+ * `hang` is the one directive that reads naturally without a colon, so both `hang` and
+ * `hang:` are accepted.
+ */
+const FAKE_HANG = /^\s*hang\s*:?\s*$/i;
+
+/** Parses one prompt line into a directive, or `null` when the line is plain assistant text. */
+function parseDirective(line: string): { action: string; value: string } | null {
+  if (FAKE_HANG.test(line)) return { action: 'hang', value: '' };
+  const match = FAKE_DIRECTIVE.exec(line);
+  if (!match) return null;
+  return { action: (match[1] ?? '').toLowerCase(), value: (match[2] ?? '').trim() };
+}
+
 export const fakeAdapter: AgentAdapter = {
   buildArgv: async () => {
     throw new Error('The fake adapter runs in-process and does not build a command line.');
@@ -100,16 +114,15 @@ export async function runFakeAgent(input: AgentRunInput): Promise<AgentResultFra
   };
 
   for (const rawLine of prompt.split(/\r?\n/)) {
-    const match = FAKE_DIRECTIVE.exec(rawLine);
     const line = rawLine.trim();
+    const directive = parseDirective(rawLine);
 
-    if (!match) {
+    if (!directive) {
       if (line !== '' && !isDirectiveLike(line)) outputParts.push(line);
       continue;
     }
 
-    const action = (match[1] ?? '').toLowerCase();
-    const value = (match[2] ?? '').trim();
+    const { action, value } = directive;
     toolIndex += 1;
     const toolUseId = `fake_${toolIndex}`;
 
