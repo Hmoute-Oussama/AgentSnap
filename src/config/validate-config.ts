@@ -1,4 +1,5 @@
 import { parseAssertions } from '../assertions/definitions.js';
+import { isKnownProvider, KNOWN_PROVIDERS } from '../adapters/providers.js';
 import { isInside, resolveWithin, toPosixPath } from '../utils/paths.js';
 import {
   formatIssues,
@@ -83,6 +84,19 @@ export function validateConfig(
 
   issues.push(...rejectUnknownKeys(document, ['version', 'agent', 'sandbox', 'defaults', 'snapshot', 'security', 'tests'], ''));
 
+  // A config written for a future AgentSnap must fail loudly rather than be silently
+  // reinterpreted against today's schema, which is how "it ran but ignored my settings"
+  // bugs start.
+  const declaredVersion = document['version'];
+  if (declaredVersion !== undefined && declaredVersion !== CONFIG_VERSION) {
+    issues.push({
+      hint: `Set \`version: ${CONFIG_VERSION}\`.`,
+      message: `is ${JSON.stringify(declaredVersion)}, but this AgentSnap only understands \`version: ${CONFIG_VERSION}\`.`,
+      path: 'version',
+    });
+  }
+
+
   const config: AgentSnapConfig = {
     agent,
     configPath: resolve(options.configPath),
@@ -139,8 +153,14 @@ function readAgent(raw: unknown, issues: Issue[]): AgentConfig {
       message: 'is required.',
       hint: 'Choose an adapter name, for example `claude-code`. Run `agentsnap doctor` to list detected adapters.',
     });
-  } else if (typeof provider !== 'string' || provider.trim() === '') {
+} else if (typeof provider !== 'string' || provider.trim() === '') {
     issues.push({ path: 'agent.provider', message: 'must be a non-empty string.' });
+  } else if (!isKnownProvider(provider.trim())) {
+    issues.push({
+      hint: `Set \`agent.provider\` to one of: ${KNOWN_PROVIDERS.join(', ')}. Run \`agentsnap doctor\` to see which runtimes are detected on this machine.`,
+      message: `unknown provider ${JSON.stringify(provider.trim())}.`,
+      path: 'agent.provider',
+    });
   } else {
     agent.provider = provider.trim();
   }

@@ -1,6 +1,6 @@
 import { toPosixPath } from '../utils/paths.js';
 import { resolveExecutable } from './executable.js';
-import { probeVersion, versionAtLeast } from './registry.js';
+import { probeVersion, versionAtLeast } from './version.js';
 import type {
   AgentAdapter,
   AgentCapabilities,
@@ -305,13 +305,20 @@ export function parseResult(record: unknown): AgentResultFragment | null {
   const errorText = typeof record['error'] === 'string' ? record['error'] : undefined;
   if (errorText) errors.push(errorText);
 
+  const output = typeof record['result'] === 'string' ? record['result'] : undefined;
+  if (isError && errors.length === 0) {
+    // A failed run that reports no reason is the most frustrating failure mode there is.
+    // The CLI usually puts the explanation in `result`, so surface that rather than nothing.
+    errors.push(output?.trim() || `the runtime reported ${String(record['subtype'] ?? 'an error')}`);
+  }
+
   const usage = readUsage(record['usage']);
   const cost = typeof record['total_cost_usd'] === 'number' ? record['total_cost_usd'] : undefined;
 
   const result: AgentResultFragment = {
     errors,
     ok: !isError,
-    output: typeof record['result'] === 'string' ? record['result'] : undefined,
+    output,
     usage: cost === undefined ? usage : { ...usage, costUsd: cost },
   };
   if (typeof record['num_turns'] === 'number') result.numTurns = record['num_turns'];
