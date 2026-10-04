@@ -157,6 +157,48 @@ describe('runTest', () => {
     }
   });
 
+  it('reports a mistyped directive instead of passing a test that never ran', async () => {
+    const { config, dispose } = await makeProject([
+      makeTest({
+        assertions: assertions({ output_contains: 'Deploying' }),
+        name: 'mistyped directive',
+        // `say:` and `run:` are the natural words to reach for, and neither exists. Treating them
+        // as prose made the run produce no actions while the assertion below still passed.
+        prompt: ['say: Deploying.', 'run: npm publish'].join('\n'),
+      }),
+    ]);
+    try {
+      const record = await run({ config, test: firstTest(config) });
+      assert.equal(record.status, 'failed');
+      const errors = record.summary.errors.join('\n');
+      assert.match(errors, /unknown directive `say:`/);
+      assert.match(errors, /read, write, append, delete, exec, ask, network, fail, text, hang/);
+      assert.equal(
+        record.assertions.find((entry) => entry.kind === 'output_contains')?.status,
+        'failed',
+      );
+    } finally {
+      await dispose();
+    }
+  });
+
+  it('treats an indented line as prose rather than a directive', async () => {
+    const { config, dispose } = await makeProject([
+      makeTest({
+        assertions: assertions({ output_contains: 'say: Deploying.' }),
+        name: 'indented prose',
+        prompt: ['  say: Deploying.', 'text: done'].join('\n'),
+      }),
+    ]);
+    try {
+      const record = await run({ config, test: firstTest(config) });
+      assert.equal(record.status, 'passed');
+      assert.deepEqual(record.summary.errors, []);
+    } finally {
+      await dispose();
+    }
+  });
+
   it('captures created, modified and deleted files', async () => {
     const { config, dispose } = await makeProject(
       [

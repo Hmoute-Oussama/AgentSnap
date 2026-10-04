@@ -48,29 +48,35 @@ network and no model, and it produces the same shape of event stream as a real a
 
 The prompt is a directive instead of prose:
 
-| Directive | Behavior |
+| Directive | Effect |
 | --- | --- |
-| `say: <text>` | Emit assistant text |
+| `text: <message>` | Append text to the agent's final output |
 | `read: <path>` | Read a file |
-| `write: <path>` with `content: <text>` | Write a file |
-| `edit: <path>` | Modify an existing file |
+| `write: <path> = <text>` | Create or overwrite a file |
+| `append: <path> = <text>` | Append to a file |
 | `delete: <path>` | Delete a file |
-| `run: <command>` | Execute a command |
-| `tool: <name>` | Record a tool call |
-| `confirm` / `deny` | Answer or decline a permission request |
-| `hang` or `hang: <ms>` | Never finish, to exercise timeouts |
-| `fail: <message>` | Fail the run |
+| `exec: <command>` | Execute a command in the sandbox, tokenized and shell-free |
+| `ask: <tool>` | Grant a permission request for that tool (default `Bash`) |
+| `network: <url>` | Record a network access attempt |
+| `fail: <message>` | End the run with a non-fatal error |
+| `hang` or `hang: <seconds>` | Never finish, to exercise timeouts |
 
 ```
-say: Working on it.
+text: Working on it.
 read: README.md
-run: npm test
-write: docs/plan.md
-  content: Draft plan.
+exec: npm test
+write: docs/plan.md = Draft plan.
 ```
 
-Lines starting with two spaces continue the previous directive, which is how `content:` gets a
-multi-line body.
+Content is given inline after `=`, on the same line.
+
+Any other line is appended to the agent's output, with one exception: a line that starts at column
+zero with `word:` is treated as an attempt to script the agent, and an unrecognized word is
+reported as a run error naming the supported directives. Indent a line to write it as prose.
+
+That strictness is deliberate. `say: Deploying.` and `run: npm publish` are the words you reach
+for first, and while they were silently treated as prose a test could pass with `output_contains`
+having verified nothing but its own prompt.
 
 The fake adapter is public on purpose. It is the only way to test a suite, a sandbox or a CI
 pipeline without spending a token, and it makes failure messages reproducible.

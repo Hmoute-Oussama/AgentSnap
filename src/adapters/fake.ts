@@ -51,6 +51,22 @@ function parseDirective(line: string): { action: string; value: string } | null 
   return { action: (match[1] ?? '').toLowerCase(), value: (match[2] ?? '').trim() };
 }
 
+const DIRECTIVE_NAMES = 'read, write, append, delete, exec, ask, network, fail, text, hang';
+
+/**
+ * A line that opens with `word:` is an attempt to script the agent, so an unrecognized one is
+ * reported instead of being read as prose.
+ *
+ * This matters more than it looks: a prompt full of `say:` lines used to produce zero actions and
+ * zero output, and every assertion that only checked the agent's final message then passed
+ * without anything having happened. A test framework that can pass without running is worse than
+ * no test framework. Indent a line to make it prose, which is the escape hatch.
+ */
+const FAKE_DIRECTIVE_ATTEMPT = /^([a-z][a-z_]*)\s*:\s*(.*)$/;
+
+/** `https://…` and friends are prose, not a mistyped directive. */
+const FAKE_URL_ATTEMPT = /^(?:https?|ftp|file|mailto|git):/i;
+
 export const fakeAdapter: AgentAdapter = {
   buildArgv: async () => {
     throw new Error('The fake adapter runs in-process and does not build a command line.');
@@ -118,7 +134,18 @@ export async function runFakeAgent(input: AgentRunInput): Promise<AgentResultFra
     const directive = parseDirective(rawLine);
 
     if (!directive) {
-      if (line !== '' && !isDirectiveLike(line)) outputParts.push(line);
+      const attempt = FAKE_DIRECTIVE_ATTEMPT.exec(rawLine);
+      if (attempt !== null && !FAKE_URL_ATTEMPT.test(rawLine)) {
+        const message =
+          `unknown directive \`${attempt[1] ?? ''}:\` in the fake agent prompt. ` +
+          `Supported directives are ${DIRECTIVE_NAMES}. Indent the line to write it as prose.`;
+        errors.push(message);
+        // Emitted as well as collected, because the recorded run is where a reader looks to find
+        // out why a test failed.
+        emit({ fatal: false, kind: 'error', message });
+        continue;
+      }
+      if (line !== '') outputParts.push(line);
       continue;
     }
 
@@ -276,7 +303,4 @@ export async function runFakeAgent(input: AgentRunInput): Promise<AgentResultFra
   return result;
 }
 
-/** Detects near-miss directives so typos surface as output instead of silent success. */
-function isDirectiveLike(line: string): boolean {
-  return /^[a-z_]+\s*:/i.test(line) && /^\s*(read|write|append|delete|exec|ask|network|fail|text|hang)/i.test(line);
-}
+

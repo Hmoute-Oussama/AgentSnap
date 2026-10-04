@@ -64,14 +64,19 @@ after the agent, which is why it is the cheapest way to prove the agent did not 
 | `max_tool_calls: <n>` | The agent made at most `n` tool calls |
 | `min_tool_calls: <n>` | The agent made at least `n` tool calls |
 | `max_steps: <n>` | The run took at most `n` steps |
-| `tool_used: <name>` | The agent called that tool |
+| `tool_used: <name>` | The agent called that tool. `{ name: Read, min: 2 }` requires at least two calls |
 | `tool_not_used: <name>` | The agent never called that tool |
-| `must_ask_confirmation: <tool>` | The agent requested confirmation before using that tool |
-| `must_not_ask_confirmation: <tool>` | The agent used that tool without asking |
+| `must_ask_confirmation: true` | The agent requested permission at least once |
+| `must_not_ask_confirmation: true` | The agent ran without requesting permission |
 | `network_access_forbidden: true` | The agent made no network requests |
 
-The confirmation assertions are the ones worth reaching for when testing agent safety: they
-assert the *policy*, not just the outcome.
+The confirmation assertions check that a permission request happened at all, not which tool it was
+for; the tools involved are listed in the failure message. They are the ones worth reaching for
+when testing agent safety, because they assert the policy rather than the outcome.
+
+`network_access_forbidden` reports itself as *skipped* unless the sandbox can actually block
+egress, because an assertion that cannot fail in the active sandbox is worse than no assertion. It
+requires `sandbox.type: docker` with `network: none`.
 
 ## Output
 
