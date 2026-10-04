@@ -136,14 +136,79 @@ try {
   check(run.status === 0, `\`agentsnap run\` failed from an installed package:\n${run.stdout ?? ''}${run.stderr ?? ''}`);
   check(/PASS/.test(run.stdout ?? ''), 'the installed CLI must report a passing run');
 
-  // --- The library entry point resolves ---------------------------------------
-  const library = spawnSync(
-    process.execPath,
-    ['--input-type=module', '-e', "import('agentsnap').then((m) => console.log(Object.keys(m).length))"],
-    { cwd: workspace, encoding: 'utf8' },
+  // --- The library entry point is actually usable ------------------------------
+  // Importing "something" is not enough: a rename or a moved module breaks consumers just as
+  // surely as a missing file. This drives the documented public surface end to end, from the
+  // installed tarball, with no devDependencies available.
+  const REQUIRED_EXPORTS = [
+    'ExitCode',
+    'claudeCodeAdapter',
+    'createReporter',
+    'createSandbox',
+    'evaluateAssertions',
+    'fakeAdapter',
+    'loadConfig',
+    'main',
+    'parseAssertions',
+    'runSuite',
+    'runTest',
+  ];
+
+  const libraryScript = `
+    import { ALL_TESTS, createReporter, fakeAdapter, loadConfig, runSuite } from 'agentsnap';
+    const api = await import('agentsnap');
+    const absent = ${JSON.stringify(REQUIRED_EXPORTS)}.filter((name) => api[name] === undefined);
+    if (absent.length > 0) {
+      console.error('missing exports: ' + absent.join(', '));
+      process.exit(1);
+    }
+    const silent = {
+      debug() {},
+      error() {},
+      info() {},
+      out() {},
+      raw() {},
+      warn() {},
+    };
+    const config = await loadConfig({ cwd: process.argv[1] });
+    const result = await runSuite({
+      adapter: fakeAdapter,
+      bail: false,
+      concurrency: 1,
+      config,
+      defaultTestCommand: null,
+      filter: ALL_TESTS,
+      logger: silent,
+      persistRuns: false,
+      recordEvents: false,
+      reporter: createReporter({
+        color: { bold: (t) => t, dim: (t) => t, red: (t) => t, green: (t) => t, yellow: (t) => t },
+        logger: silent,
+        name: 'json',
+        showEvents: false,
+        showUsage: false,
+        stream: false,
+        verboseAssertions: false,
+        write: (text) => process.stdout.write(text),
+      }),
+      signal: new AbortController().signal,
+      toolVersion: 'check-install',
+    });
+    console.log('status=' + result.status);
+  `;
+
+  const library = spawnSync(process.execPath, ['--input-type=module', '-e', libraryScript, project], {
+    cwd: workspace,
+    encoding: 'utf8',
+  });
+  check(
+    library.status === 0,
+    `the installed library API failed: ${library.stderr || library.stdout || ''}`,
   );
-  check(library.status === 0, `importing "agentsnap" failed: ${library.stderr ?? ''}`);
-  check(Number(library.stdout.trim()) > 0, 'the library entry point must export something');
+  check(
+    (library.stdout ?? '').includes('status=pass'),
+    `a suite run through the installed library must pass, got: ${(library.stdout ?? '').trim()}`,
+  );
 } finally {
   await rm(workspace, { recursive: true, force: true, maxRetries: 3 }).catch(() => undefined);
 }
