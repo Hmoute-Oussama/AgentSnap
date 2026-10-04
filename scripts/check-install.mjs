@@ -8,6 +8,7 @@
  * that gap by testing the artifact exactly as npm would deliver it.
  */
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -19,21 +20,35 @@ const check = (condition, message) => {
   if (!condition) problems.push(message);
 };
 
-// npm ships as a .cmd shim on Windows, which Node cannot spawn without a shell. When this
-// script runs through `npm run`, npm_execpath points straight at npm's own entry point, so
-// the usual case stays shell-free.
-const npmExecPath = process.env['npm_execpath'];
+// npm ships as a `.cmd` shim on Windows, which Node cannot spawn without a shell. Since this
+// tool refuses to run agent commands through a shell, it resolves npm's JavaScript entry point
+// instead and spawns that with the current Node binary. The candidates cover the two ways npm is
+// normally reachable: the one running this script, and the one installed with Node itself.
+const npmCandidates = [
+  process.env['npm_execpath'],
+  join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  join(dirname(dirname(process.execPath)), 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  join(dirname(dirname(process.execPath)), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+].filter((candidate) => candidate !== undefined);
+
+let npmCli;
+for (const candidate of npmCandidates) {
+  if (existsSync(candidate) && candidate.endsWith('.js')) {
+    npmCli = candidate;
+    break;
+  }
+}
 
 function npm(args, options = {}) {
-  const result =
-    npmExecPath !== undefined && npmExecPath.endsWith('.js')
-      ? spawnSync(process.execPath, [npmExecPath, ...args], { encoding: 'utf8', ...options })
-      : spawnSync('npm', args, {
-          encoding: 'utf8',
-          shell: process.platform === 'win32',
-          ...options,
-        });
-  return result;
+  if (npmCli !== undefined) {
+    return spawnSync(process.execPath, [npmCli, ...args], { encoding: 'utf8', ...options });
+  }
+  // Last resort for an unusual layout: the shim is only reachable through a shell on Windows, so
+  // this path is reported rather than hidden.
+  process.stderr.write(
+    'note: could not locate npm-cli.js; falling back to the npm shim, which requires a shell on Windows.\n',
+  );
+  return spawnSync('npm', args, { encoding: 'utf8', shell: process.platform === 'win32', ...options });
 }
 
 const workspace = await mkdtemp(join(tmpdir(), 'agentsnap-install-'));

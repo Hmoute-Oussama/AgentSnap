@@ -1,0 +1,71 @@
+name: Bug report
+description: Something in AgentSnap behaves incorrectly
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing this. The more precisely the behavior is described, the faster it can
+        be reproduced and fixed.
+
+        Please do not include secrets. AgentSnap redacts what it detects, but redaction is not a
+        guarantee.
+
+  - type: input
+    id: version
+    attributes:
+      label: AgentSnap version
+      description: Output of `agentsnap version`
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Assertion
+        - Snapshot
+        - Sandbox or Docker
+        - Adapter or agent integration
+        - CLI output or exit code
+        - Documentation
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead?
+      description: Include the failing assertion or output, and the exit code.
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant configuration
+      description: The `tests` entries and `security` block. Redact anything sensitive.
+      render: yaml
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `agentsnap doctor`
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for this.
+        - label: This is not about a model behaving differently than expected.

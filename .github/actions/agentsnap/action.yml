@@ -1,0 +1,140 @@
+name: 'AgentSnap'
+description: 'Run AgentSnap behavioral tests and annotate the pull request with the results.'
+author: 'AgentSnap'
+
+branding:
+  icon: 'check-circle'
+  color: 'purple'
+
+inputs:
+  config:
+    description: 'Path to agentsnap.yaml. Leave empty to discover it.'
+    required: false
+    default: ''
+  command:
+    description: 'The agentsnap subcommand to run.'
+    required: false
+    default: 'run'
+  tag:
+    description: 'Only run tests with this tag.'
+    required: false
+    default: ''
+  extra-args:
+    description: 'Extra arguments appended to the agentsnap command.'
+    required: false
+    default: ''
+  report:
+    description: 'Path of a JSON report to annotate onto the pull request. Leave empty to skip annotation.'
+    required: false
+    default: ''
+  github-token:
+    description: 'Token used to write annotations. Defaults to github.token.'
+    required: false
+    default: ${{ github.token }}
+  fail-on-regression:
+    description: 'Fail the step when a security assertion regressed.'
+    required: false
+    default: 'true'
+
+outputs:
+  exit-code:
+    description: 'The exit code agentsnap exited with.'
+    value: ${{ steps.run.outputs.exit_code }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install AgentSnap
+      shell: bash
+      run: npm install --no-save --no-package-lock agentsnap
+
+    - name: Report AgentSnap version
+      id: version
+      shell: bash
+      run: echo "version=$(npx agentsnap version)" >> "$GITHUB_OUTPUT"
+
+    - name: Validate configuration
+      if: inputs.config != '' || hashFiles('agentsnap.yaml') != ''
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.config }}" ]; then
+          npx agentsnap validate --config "${{ inputs.config }}"
+        else
+          npx agentsnap validate
+        fi
+
+    - name: Run AgentSnap
+      id: run
+      shell: bash
+      env:
+        AGENTSNAP_COLOR: '1'
+        FORCE_COLOR: '1'
+      run: |
+        set -o pipefail
+        args=("${{ inputs.command }}")
+        if [ -n "${{ inputs.config }}" ]; then
+          args+=(--config "${{ inputs.config }}")
+        fi
+        if [ -n "${{ inputs.tag }}" ]; then
+          args+=(--tag "${{ inputs.tag }}")
+        fi
+        if [ -n "${{ inputs.report }}" ]; then
+          args+=(--reporter json)
+        fi
+        # shellcheck disable=SC2206
+        [ -z "${{ inputs.extra-args }}" ] || args+=(${{ inputs.extra-args }})
+
+        report="${{ inputs.report }}"
+        if [ -n "$report" ]; then
+          npx agentsnap "${args[@]}" > "$report"
+          status=$?
+        else
+          npx agentsnap "${args[@]}"
+          status=$?
+        fi
+        echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+        exit $status
+
+    - name: Annotate the pull request
+      if: always() && inputs.report != ''
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('node:fs');
+          const report = process.env.AGENTSNAP_REPORT;
+          if (!fs.existsSync(report)) {
+            core.warning(`No AgentSnap report at ${report}.`);
+            return;
+          }
+          const parsed = JSON.parse(fs.readFileSync(report, 'utf8'));
+          const annotations = [];
+          for (const test of parsed.tests ?? []) {
+            const body = [];
+            for (const assertion of test.assertions ?? []) {
+              if (assertion.status === 'passed') continue;
+              body.push(`- ${assertion.kind}: ${assertion.message ?? assertion.observed ?? assertion.status}`);
+            }
+            if (test.status === 'passed' && body.length === 0) continue;
+            annotations.push({
+              path: process.env.AGENTSNAP_CONFIG_PATH || '.agentsnap/snapshots',
+              start_line: 1,
+              end_line: 1,
+              annotation_level: test.status === 'passed' ? 'notice' : 'failure',
+              title: `AgentSnap: ${test.name}`,
+              message: body.length > 0 ? body.join('\n') : test.status,
+            });
+          }
+          if (annotations.length === 0) {
+            core.info('AgentSnap reported no findings.');
+            return;
+          }
+          await github.rest.checks.createAnnotations({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            head_sha: context.payload.pull_request?.head.sha ?? context.sha,
+            annotations,
+          });
+        env:
+          AGENTSNAP_REPORT: ${{ inputs.report }}
+          AGENTSNAP_CONFIG_PATH: ${{ inputs.config }}
