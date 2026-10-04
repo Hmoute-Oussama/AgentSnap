@@ -6,7 +6,7 @@ import { ExitCode } from '../core/exit-codes.js';
 import { createColorizer, shouldUseColor } from '../utils/color.js';
 import { createLogger, resolveLogLevel } from '../utils/logger.js';
 import { parseArgs, peekFlags, readFlags } from './args.js';
-import { COMMAND_ALIASES, renderHelp } from './help.js';
+import { COMMAND_ALIASES, renderCommandHelp, renderHelp } from './help.js';
 import { commandDoctor } from './commands/doctor.js';
 import { commandInit } from './commands/init.js';
 import { commandList } from './commands/list.js';
@@ -72,8 +72,10 @@ export async function main(options: MainOptions): Promise<number> {
   const raw = parsed.command;
   const command = raw === null ? undefined : COMMAND_ALIASES[raw] ?? raw;
 
-  if (parsed.command === null && global.bool('help')) {
-    stdout.write(help);
+  // `--help` is answered here rather than inside each command so that every command shares one
+  // page, and so `agentsnap run --help` documents the flags that command actually accepts.
+  if (global.bool('help')) {
+    stdout.write(command === undefined ? help : renderCommandHelp(command, toolVersion));
     return ExitCode.Success;
   }
 
@@ -96,7 +98,7 @@ export async function main(options: MainOptions): Promise<number> {
       case 'doctor':
         return await commandDoctor(context);
       case 'help':
-        stdout.write(help);
+        stdout.write(renderCommandHelp('help', toolVersion));
         return ExitCode.Success;
       default:
         throw new UsageError(`Unknown command \`${raw}\`.`, {

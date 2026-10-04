@@ -10,11 +10,6 @@ const VALIDATE_FLAGS = ['color', 'config', 'debug', 'help', 'no-color', 'quiet',
 /** `agentsnap validate` — configuration only, no agent, no cost. */
 export async function commandValidate(context: CliContext): Promise<number> {
   const flags = readFlags(context.args, VALIDATE_FLAGS);
-  if (flags.bool('help')) {
-    context.logger.out(context.help);
-    return ExitCode.Success;
-  }
-
   const { color, logger } = context;
   try {
     const config = await loadConfig({ configPath: flags.string('config'), cwd: context.cwd });

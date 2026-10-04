@@ -10,11 +10,6 @@ const LIST_FLAGS = ['color', 'config', 'debug', 'help', 'json', 'no-color', 'qui
 /** `agentsnap list` — shows what is configured without spending a token. */
 export async function commandList(context: CliContext): Promise<number> {
   const flags = readFlags(context.args, LIST_FLAGS);
-  if (flags.bool('help')) {
-    context.logger.out(context.help);
-    return ExitCode.Success;
-  }
-
   const config = await loadConfig({ configPath: flags.string('config'), cwd: context.cwd });
   const { color, logger } = context;
   const verbose = flags.bool('verbose');

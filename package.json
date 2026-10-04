@@ -50,7 +50,7 @@
     "test": "node --test build/tests/**/*.test.js",
     "test:unit": "npm run build:test && node --test build/tests/unit/*.test.js",
     "test:integration": "npm run build:test && node --test build/tests/integration/*.test.js",
-    "test:e2e": "npm run build:test && node --test build/tests/e2e/*.test.js",
+    "test:e2e": "npm run build && npm run build:test && node --test build/tests/e2e/*.test.js",
     "test:coverage": "node --test --experimental-test-coverage build/tests/**/*.test.js",
     "verify": "npm run lint && npm run typecheck && npm run build && npm run build:test && node --test build/tests/**/*.test.js",
     "prepack": "npm run clean && npm run build",

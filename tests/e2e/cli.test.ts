@@ -89,6 +89,24 @@ describe('agentsnap CLI', () => {
     }
   });
 
+  it('documents each command separately', async () => {
+    const project = await makeCliProject();
+    try {
+      const runHelp = await cli(['run', '--help'], project.path);
+      assert.equal(runHelp.exitCode, 0);
+      assert.match(runHelp.stdout, /agentsnap run \[options\]/);
+      assert.match(runHelp.stdout, /--snapshot-mode/);
+      assert.match(runHelp.stdout, /--update-snapshots/);
+
+      const listHelp = await cli(['list', '--help'], project.path);
+      assert.equal(listHelp.exitCode, 0);
+      assert.match(listHelp.stdout, /agentsnap list \[options\]/);
+      assert.doesNotMatch(listHelp.stdout, /--update-snapshots/);
+    } finally {
+      await project.dispose();
+    }
+  });
+
   it('rejects an unknown command instead of guessing', async () => {
     const project = await makeCliProject();
     try {

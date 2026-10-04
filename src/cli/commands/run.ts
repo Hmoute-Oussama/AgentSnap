@@ -49,10 +49,6 @@ export async function commandRun(context: CliContext): Promise<number> {
   const parsed = context.args;
   const flags = readFlags(parsed, RUN_FLAGS);
 
-  if (flags.bool('help')) {
-    context.logger.out(context.help);
-    return ExitCode.Success;
-  }
 
   // The positional after the command is a test-name filter, so `agentsnap run web/*` works.
   const nameFilter = flags.string('name') ?? parsed.positionals[0];

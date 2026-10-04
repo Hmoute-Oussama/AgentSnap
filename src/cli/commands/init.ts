@@ -31,11 +31,6 @@ const INIT_FLAGS = [
  */
 export async function commandInit(context: import('../context.js').CliContext): Promise<number> {
   const flags = readFlags(context.args, INIT_FLAGS);
-  if (flags.bool('help')) {
-    context.logger.out(context.help);
-    return ExitCode.Success;
-  }
-
   const target = context.cwd;
   const configPath = flags.string('config') ?? join(target, DEFAULT_CONFIG_FILENAME);
   const force = flags.bool('force');

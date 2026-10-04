@@ -21,11 +21,6 @@ const DOCTOR_FLAGS = ['color', 'config', 'debug', 'help', 'json', 'no-color', 'q
  */
 export async function commandDoctor(context: CliContext): Promise<number> {
   const flags = readFlags(context.args, DOCTOR_FLAGS);
-  if (flags.bool('help')) {
-    context.logger.out(context.help);
-    return ExitCode.Success;
-  }
-
   const entries: DiagnosticEntry[] = [];
   entries.push(nodeDiagnostic());
   entries.push(await configDiagnostic(context, flags.string('config')));
